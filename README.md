@@ -25,6 +25,7 @@ A Docker-containerized bot that monitors TCDD (Turkish State Railways) train tic
 2. Edit `.env` with your credentials:
    - Telegram bot token and chat ID
    - TCDD API authorization tokens
+   - Routes to monitor (e.g., ISTANBUL-KONYA,ANKARA-ISTANBUL)
    - Dates to monitor
 
 3. Build and run:
@@ -36,6 +37,7 @@ A Docker-containerized bot that monitors TCDD (Turkish State Railways) train tic
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
+| `ROUTES` | Yes | - | Comma-separated routes (e.g., ISTANBUL-KONYA,ANKARA-ISTANBUL) |
 | `CHECK_DATES` | Yes | - | Comma-separated dates in DD-MM-YYYY format |
 | `CHECK_INTERVAL` | No | 300 | Seconds between availability checks |
 | `LOG_LEVEL` | No | INFO | Logging level (DEBUG, INFO, WARNING, ERROR) |
@@ -43,6 +45,19 @@ A Docker-containerized bot that monitors TCDD (Turkish State Railways) train tic
 | `TELEGRAM_CHAT_ID` | Yes | - | Telegram chat ID for notifications |
 | `USER_AUTHORIZATION` | Yes | - | TCDD API user authorization token |
 | `AUTHORIZATION` | Yes | - | TCDD API authorization token |
+
+## Available Routes
+
+| Route | From | To |
+|-------|------|------|
+| ISTANBUL-KONYA | İstanbul (Pendik) | Konya (Selçuklu YHT) |
+| ISTANBUL-ANKARA | Istanbul (Pendik) | Ankara (Gar) |
+| ANKARA-ISTANBUL | Ankara (Gar) | Istanbul (Pendik) |
+| ANKARA-KONYA | Ankara (Gar) | Konya (Selçuklu YHT) |
+| KONYA-ISTANBUL | Konya (Selçuklu YHT) | Istanbul (Pendik) |
+| KONYA-ANKARA | Konya (Selçuklu YHT) | Ankara (Gar) |
+
+**Note:** This bot only monitors **YHT** (High Speed Train) routes.
 
 ## Docker Compose Deployment
 
@@ -66,6 +81,7 @@ docker build -t tcdd-bot .
 # Run
 docker run -d \
   --name tcdd-bot \
+  -e ROUTES="ISTANBUL-KONYA,ANKARA-ISTANBUL" \
   -e CHECK_DATES="21-03-2026,22-03-2026" \
   -e TELEGRAM_BOT_TOKEN="your_token" \
   -e TELEGRAM_CHAT_ID="your_chat_id" \
@@ -95,10 +111,3 @@ docker stop tcdd-bot
 - Check network connectivity
 - Verify TCDD API tokens are not expired
 - Check logs for specific error messages
-
-## Route Monitored
-
-- **From**: SELÇUKLU YHT (KONYA)
-- **To**: İSTANBUL(PENDİK)
-- **Train Type**: Tourist Train (TURISTIK_TREN)
-- **Check Time**: 21:00 Turkey time (UTC+3)
