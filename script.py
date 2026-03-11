@@ -378,26 +378,32 @@ def process_train_data(data, departure_date, route, seat_classes):
 
                 if available_by_class:
                     total_seats = sum(available_by_class.values())
-                    class_details = ", ".join(
-                        [
-                            f"{count} {SEAT_CLASS_MAP[code]['name']}"
-                            for code, count in available_by_class.items()
-                        ]
-                    )
 
-                    msg = f"Train {train_number} ({exact_departure_time}) has {total_seats} seats AVAILABLE ({class_details}) on {base_date}!"
-                    logger.info(f"AVAILABLE: {msg}")
+                    if total_seats > 0:
+                        class_details = ", ".join(
+                            [
+                                f"{count} {SEAT_CLASS_MAP[code]['name']}"
+                                for code, count in available_by_class.items()
+                            ]
+                        )
 
-                    for class_code in available_by_class:
-                        notify_key = f"{route}_{train_number}_{class_code}_{base_date}"
+                        msg = f"Train {train_number} ({exact_departure_time}) has {total_seats} seats AVAILABLE ({class_details}) on {base_date}!"
+                        logger.info(f"AVAILABLE: {msg}")
+
+                        # Single notification key per train+date (not per class)
+                        notify_key = f"{route}_{train_number}_{base_date}"
                         if notify_key not in notified_trains:
                             send_telegram_message(
                                 f"🚂 TCDD Bot Alert!\n[{route.replace('-', '→')}] {msg}"
                             )
                             notified_trains.add(notify_key)
+                    else:
+                        logger.info(
+                            f"Train {train_number} ({exact_departure_time}) has 0 seats available on {base_date}"
+                        )
                 else:
                     logger.info(
-                        f"Train {train_number} ({exact_departure_time}) has no seats available in monitored classes on {base_date}"
+                        f"Train {train_number} ({exact_departure_time}) has no monitored classes on {base_date}"
                     )
 
 
