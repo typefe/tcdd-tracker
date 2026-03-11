@@ -39,6 +39,46 @@ SUSTAINED_FAILURE_THRESHOLD = 4
 # To prevent spamming, store which (train_number, date) we have already notified about
 notified_trains = set()
 
+# Route mapping for the 3 main stations
+ROUTE_MAP = {
+    "ISTANBUL-KONYA": {
+        "from_id": 48,
+        "from_name": "İSTANBUL(PENDİK)",
+        "to_id": 1336,
+        "to_name": "SELÇUKLU YHT (KONYA)",
+    },
+    "ISTANBUL-ANKARA": {
+        "from_id": 48,
+        "from_name": "İSTANBUL(PENDİK)",
+        "to_id": 98,
+        "to_name": "ANKARA GAR",
+    },
+    "ANKARA-ISTANBUL": {
+        "from_id": 98,
+        "from_name": "ANKARA GAR",
+        "to_id": 48,
+        "to_name": "İSTANBUL(PENDİK)",
+    },
+    "ANKARA-KONYA": {
+        "from_id": 98,
+        "from_name": "ANKARA GAR",
+        "to_id": 1336,
+        "to_name": "SELÇUKLU YHT (KONYA)",
+    },
+    "KONYA-ISTANBUL": {
+        "from_id": 1336,
+        "from_name": "SELÇUKLU YHT (KONYA)",
+        "to_id": 48,
+        "to_name": "İSTANBUL(PENDİK)",
+    },
+    "KONYA-ANKARA": {
+        "from_id": 1336,
+        "from_name": "SELÇUKLU YHT (KONYA)",
+        "to_id": 98,
+        "to_name": "ANKARA GAR",
+    },
+}
+
 
 def parse_check_dates():
     """Parse CHECK_DATES env var, validate format and not in past."""
@@ -90,6 +130,45 @@ def parse_check_dates():
     return valid_dates
 
 
+def parse_routes():
+    """Parse ROUTES env var, validate each route exists in ROUTE_MAP."""
+    routes_str = os.getenv("ROUTES", "")
+    if not routes_str:
+        logger.error("ROUTES environment variable is empty or not set")
+        send_telegram_message(
+            "🚨 TCDD Bot: ROUTES environment variable is empty or not set. Bot cannot start."
+        )
+        sys.exit(1)
+
+    valid_routes = []
+    invalid_routes = []
+
+    for route in routes_str.split(","):
+        route = route.strip().upper()
+        if not route:
+            continue
+        if route in ROUTE_MAP:
+            valid_routes.append(route)
+        else:
+            invalid_routes.append(route)
+
+    if invalid_routes:
+        error_msg = f"Invalid route(s): {', '.join(invalid_routes)}"
+        logger.error(error_msg)
+        send_telegram_message(f"🚨 TCDD Bot: {error_msg}")
+        sys.exit(1)
+
+    if not valid_routes:
+        logger.error("No valid routes to monitor")
+        send_telegram_message(
+            "🚨 TCDD Bot: No valid routes to monitor. Bot cannot start."
+        )
+        sys.exit(1)
+
+    logger.info(f"Monitoring {len(valid_routes)} route(s): {valid_routes}")
+    return valid_routes
+
+
 def send_telegram_message(message):
     """Send a message via Telegram bot."""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
@@ -108,9 +187,11 @@ def send_telegram_message(message):
         logger.error(f"Failed to send Telegram notification: {e}")
 
 
-def check_with_retry(departure_date):
+def check_with_retry(departure_date, route):
     """Check train availability with retry logic and exponential backoff."""
     global consecutive_failures
+
+    route_info = ROUTE_MAP[route]
 
     url = "https://web-api-prod-ytp.tcddtasimacilik.gov.tr/tms/train/train-availability?environment=dev&userId=1"
 
@@ -129,17 +210,17 @@ def check_with_retry(departure_date):
     payload = {
         "searchRoutes": [
             {
-                "departureStationId": 1336,
-                "departureStationName": "SELÇUKLU YHT (KONYA)",
-                "arrivalStationId": 48,
-                "arrivalStationName": "İSTANBUL(PENDİK)",
+                "departureStationId": route_info["from_id"],
+                "departureStationName": route_info["from_name"],
+                "arrivalStationId": route_info["to_id"],
+                "arrivalStationName": route_info["to_name"],
                 "departureDate": departure_date,
             }
         ],
         "passengerTypeCounts": [{"id": 0, "count": 1}],
         "searchReservation": False,
         "searchType": "DOMESTIC",
-        "blTrainTypes": ["TURISTIK_TREN"],
+        "blTrainTypes": ["YHT"],
     }
 
     for attempt, delay in enumerate(RETRY_DELAYS):
@@ -169,12 +250,12 @@ def check_with_retry(departure_date):
                 logger.info("API connection restored after sustained failure")
                 send_telegram_message("✅ TCDD Bot: API connection restored")
 
-            logger.info(f"Success! Retrieved API data for {departure_date}")
+            logger.info(f"Success! Retrieved API data for {route} on {departure_date}")
             return data
 
         except requests.Timeout:
             logger.warning(
-                f"Request timeout (attempt {attempt + 1}/{len(RETRY_DELAYS)}) for {departure_date}"
+                f"Request timeout (attempt {attempt + 1}/{len(RETRY_DELAYS)}) for {route} on {departure_date}"
             )
         except requests.ConnectionError as e:
             logger.warning(
@@ -196,7 +277,7 @@ def check_with_retry(departure_date):
     # All retries exhausted for this check
     consecutive_failures += 1
     logger.error(
-        f"API check failed for {departure_date}. Consecutive failures: {consecutive_failures}"
+        f"API check failed for {route} on {departure_date}. Consecutive failures: {consecutive_failures}"
     )
 
     # Send sustained failure alert only once when threshold is reached
@@ -265,9 +346,10 @@ def process_train_data(data, departure_date):
                     )
 
 
-def check_train_availability(departure_date):
-    """Check train availability for a specific date."""
-    data = check_with_retry(departure_date)
+def check_train_availability(departure_date, route):
+    """Check train availability for a specific date and route."""
+    logger.info(f"Checking route: {route}")
+    data = check_with_retry(departure_date, route)
     if data:
         process_train_data(data, departure_date)
 
@@ -276,6 +358,9 @@ def check_train_availability(departure_date):
 if __name__ == "__main__":
     logger.info("Starting TCDD Ticket Bot...")
 
+    # Parse and validate routes from environment
+    CHECK_ROUTES = parse_routes()
+
     # Parse and validate dates from environment
     CHECK_DATES = parse_check_dates()
     logger.info(f"Check interval: {CHECK_INTERVAL_SECONDS} seconds")
@@ -283,7 +368,8 @@ if __name__ == "__main__":
     # Simple loop to check repeatedly
     while True:
         for date in CHECK_DATES:
-            check_train_availability(date)
+            for route in CHECK_ROUTES:
+                check_train_availability(date, route)
 
         # Wait before the next request to avoid getting IP banned
         logger.info(
