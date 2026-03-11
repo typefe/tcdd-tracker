@@ -7,6 +7,8 @@ services:
     container_name: tcdd-bot
     restart: unless-stopped
     environment:
+      # Route configuration (comma-separated CITY1-CITY2 format)
+      - ROUTES=${ROUTES}
       # Date configuration (comma-separated DD-MM-YYYY format)
       - CHECK_DATES=${CHECK_DATES}
       # Check interval in seconds (default: 300)
