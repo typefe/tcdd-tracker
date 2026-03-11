@@ -39,6 +39,7 @@ A Docker-containerized bot that monitors TCDD (Turkish State Railways) train tic
 |----------|----------|---------|-------------|
 | `ROUTES` | Yes | - | Comma-separated routes (e.g., ISTANBUL-KONYA,ANKARA-ISTANBUL) |
 | `CHECK_DATES` | Yes | - | Comma-separated dates in DD-MM-YYYY format |
+| `SEAT_CLASSES` | No | EKONOMI | Comma-separated seat classes or keywords (ANY, ALL) |
 | `CHECK_INTERVAL` | No | 300 | Seconds between availability checks |
 | `LOG_LEVEL` | No | INFO | Logging level (DEBUG, INFO, WARNING, ERROR) |
 | `TELEGRAM_BOT_TOKEN` | Yes | - | Telegram bot token |
@@ -56,6 +57,20 @@ A Docker-containerized bot that monitors TCDD (Turkish State Railways) train tic
 | ANKARA-KONYA | Ankara (Gar) | Konya (Selçuklu YHT) |
 | KONYA-ISTANBUL | Konya (Selçuklu YHT) | Istanbul (Pendik) |
 | KONYA-ANKARA | Konya (Selçuklu YHT) | Ankara (Gar) |
+
+## Available Seat Classes
+
+| Class | Code | Description |
+|-------|------|-------------|
+| Economy | EKONOMI | Standard economy class |
+| Business | BUSINESS | Business class |
+| Sleeper | YATAKLI | Sleeper/Bed (not on all routes) |
+| Loca | LOCA | Private compartment |
+| Disabled | DISABLED | Wheelchair accessible |
+
+**Keywords:**
+- `ANY` - Monitor all classes except DISABLED
+- `ALL` - Monitor all classes including DISABLED
 
 **Note:** This bot monitors high-speed train (YHT) routes.
 

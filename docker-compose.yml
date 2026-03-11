@@ -11,6 +11,8 @@ services:
       - ROUTES=${ROUTES}
       # Date configuration (comma-separated DD-MM-YYYY format)
       - CHECK_DATES=${CHECK_DATES}
+      # Seat class configuration (EKONOMI, BUSINESS, YATAKLI, LOCA, DISABLED, ANY, ALL)
+      - SEAT_CLASSES=${SEAT_CLASSES:-EKONOMI}
       # Check interval in seconds (default: 300)
       - CHECK_INTERVAL=${CHECK_INTERVAL:-300}
       # Log level (DEBUG, INFO, WARNING, ERROR)

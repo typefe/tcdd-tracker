@@ -79,6 +79,17 @@ ROUTE_MAP = {
     },
 }
 
+SEAT_CLASS_MAP = {
+    "EKONOMI": {"id": 2, "name": "EKONOMİ"},
+    "BUSINESS": {"id": 1, "name": "BUSİNESS"},
+    "YATAKLI": {"id": 3, "name": "YATAKLI"},
+    "LOCA": {"id": 11, "name": "LOCA"},
+    "DISABLED": {"id": 12, "name": "TEKERLEKLİ SANDALYE"},
+}
+
+SEAT_CLASS_ANY = ["EKONOMI", "BUSINESS", "YATAKLI", "LOCA"]
+SEAT_CLASS_ALL = ["EKONOMI", "BUSINESS", "YATAKLI", "LOCA", "DISABLED"]
+
 
 def parse_check_dates():
     """Parse CHECK_DATES env var, validate format and not in past."""
@@ -167,6 +178,45 @@ def parse_routes():
 
     logger.info(f"Monitoring {len(valid_routes)} route(s): {valid_routes}")
     return valid_routes
+
+
+def parse_seat_classes():
+    classes_str = os.getenv("SEAT_CLASSES", "")
+
+    if not classes_str:
+        logger.info("SEAT_CLASSES not set, defaulting to EKONOMI")
+        return ["EKONOMI"]
+
+    classes_str = classes_str.strip().upper()
+
+    if classes_str == "ANY":
+        logger.info(f"Monitoring classes: {', '.join(SEAT_CLASS_ANY)}")
+        return SEAT_CLASS_ANY.copy()
+    elif classes_str == "ALL":
+        logger.info(f"Monitoring classes: {', '.join(SEAT_CLASS_ALL)}")
+        return SEAT_CLASS_ALL.copy()
+
+    valid_classes = []
+    invalid_classes = []
+
+    for class_code in classes_str.split(","):
+        class_code = class_code.strip()
+        if not class_code:
+            continue
+        if class_code in SEAT_CLASS_MAP:
+            valid_classes.append(class_code)
+        else:
+            invalid_classes.append(class_code)
+
+    if invalid_classes:
+        logger.warning(f"Invalid seat class(es): {', '.join(invalid_classes)}")
+
+    if not valid_classes:
+        logger.warning("No valid seat classes, defaulting to EKONOMI")
+        return ["EKONOMI"]
+
+    logger.info(f"Monitoring classes: {', '.join(valid_classes)}")
+    return valid_classes
 
 
 def send_telegram_message(message):
@@ -289,8 +339,7 @@ def check_with_retry(departure_date, route):
     return None
 
 
-def process_train_data(data, departure_date):
-    """Process API response and check for available seats."""
+def process_train_data(data, departure_date, route, seat_classes):
     train_legs = data.get("trainLegs", [])
     if not train_legs:
         logger.info("No train legs found")
@@ -299,10 +348,8 @@ def process_train_data(data, departure_date):
     for leg in train_legs:
         for availability in leg.get("trainAvailabilities", []):
             for train in availability.get("trains", []):
-                train_name = train.get("name", "Unknown Train")
                 train_number = train.get("number", "Unknown")
 
-                # Extract the true departure time instead of just the query date
                 exact_departure_time = "Unknown Time"
                 segments = train.get("segments", [])
                 if segments:
@@ -312,66 +359,68 @@ def process_train_data(data, departure_date):
                             ts / 1000
                         ).strftime("%H:%M")
 
-                found_economy = False
-                economy_available = 0
+                available_by_class = {}
 
                 for car in train.get("cars", []):
                     for avail in car.get("availabilities", []):
                         cabin_class = avail.get("cabinClass")
                         if cabin_class:
                             class_id = cabin_class.get("id")
-                            # 2 = EKONOMİ, 12 = TEKERLEKLİ SANDALYE (Disabled)
-                            # We only want to count Economy seats (id == 2)
-                            if class_id == 2:
-                                available_seats = avail.get("availability", 0)
-                                if available_seats > 0:
-                                    found_economy = True
-                                    economy_available += available_seats
+                            available_seats = avail.get("availability", 0)
 
-                # We just use the date part of our query string to map notifications
+                            for class_code in seat_classes:
+                                if SEAT_CLASS_MAP[class_code]["id"] == class_id:
+                                    if class_code not in available_by_class:
+                                        available_by_class[class_code] = 0
+                                    available_by_class[class_code] += available_seats
+
                 base_date = departure_date.split(" ")[0]
 
-                if found_economy:
-                    msg = f"Train {train_number} ({exact_departure_time}) has {economy_available} Economy seats AVAILABLE on {base_date}!"
+                if available_by_class:
+                    total_seats = sum(available_by_class.values())
+                    class_details = ", ".join(
+                        [
+                            f"{count} {SEAT_CLASS_MAP[code]['name']}"
+                            for code, count in available_by_class.items()
+                        ]
+                    )
+
+                    msg = f"Train {train_number} ({exact_departure_time}) has {total_seats} seats AVAILABLE ({class_details}) on {base_date}!"
                     logger.info(f"AVAILABLE: {msg}")
 
-                    # Check if we should send a notification
-                    notify_key = f"{train_number}_{base_date}"
-                    if notify_key not in notified_trains:
-                        send_telegram_message(f"🚂 TCDD Bot Alert!\n{msg}")
-                        notified_trains.add(notify_key)
+                    for class_code in available_by_class:
+                        notify_key = f"{route}_{train_number}_{class_code}_{base_date}"
+                        if notify_key not in notified_trains:
+                            send_telegram_message(
+                                f"🚂 TCDD Bot Alert!\n[{route.replace('-', '→')}] {msg}"
+                            )
+                            notified_trains.add(notify_key)
                 else:
                     logger.info(
-                        f"Train {train_number} ({exact_departure_time}) has no Economy seats available on {base_date}"
+                        f"Train {train_number} ({exact_departure_time}) has no seats available in monitored classes on {base_date}"
                     )
 
 
-def check_train_availability(departure_date, route):
-    """Check train availability for a specific date and route."""
+def check_train_availability(departure_date, route, seat_classes):
     logger.info(f"Checking route: {route}")
     data = check_with_retry(departure_date, route)
     if data:
-        process_train_data(data, departure_date)
+        process_train_data(data, departure_date, route, seat_classes)
 
 
-# Bot loop
 if __name__ == "__main__":
     logger.info("Starting TCDD Ticket Bot...")
 
-    # Parse and validate routes from environment
     CHECK_ROUTES = parse_routes()
-
-    # Parse and validate dates from environment
     CHECK_DATES = parse_check_dates()
+    CHECK_SEAT_CLASSES = parse_seat_classes()
     logger.info(f"Check interval: {CHECK_INTERVAL_SECONDS} seconds")
 
-    # Simple loop to check repeatedly
     while True:
         for date in CHECK_DATES:
             for route in CHECK_ROUTES:
-                check_train_availability(date, route)
+                check_train_availability(date, route, CHECK_SEAT_CLASSES)
 
-        # Wait before the next request to avoid getting IP banned
         logger.info(
             f"Waiting {CHECK_INTERVAL_SECONDS} seconds before checking again..."
         )
