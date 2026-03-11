@@ -1,0 +1,10 @@
+venv/
+.git/
+.gitignore
+output.txt
+.env
+*.pyc
+__pycache__/
+.sisyphus/
+*.md
+!README.md
