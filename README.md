@@ -57,7 +57,7 @@ A Docker-containerized bot that monitors TCDD (Turkish State Railways) train tic
 | KONYA-ISTANBUL | Konya (Selçuklu YHT) | Istanbul (Pendik) |
 | KONYA-ANKARA | Konya (Selçuklu YHT) | Ankara (Gar) |
 
-**Note:** This bot only monitors **YHT** (High Speed Train) routes.
+**Note:** This bot monitors high-speed train (YHT) routes.
 
 ## Docker Compose Deployment
 

@@ -220,7 +220,7 @@ def check_with_retry(departure_date, route):
         "passengerTypeCounts": [{"id": 0, "count": 1}],
         "searchReservation": False,
         "searchType": "DOMESTIC",
-        "blTrainTypes": ["YHT"],
+        "blTrainTypes": ["TURISTIK_TREN"],
     }
 
     for attempt, delay in enumerate(RETRY_DELAYS):
