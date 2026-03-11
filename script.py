@@ -356,7 +356,7 @@ def process_train_data(data, departure_date, route, seat_classes):
                     ts = segments[0].get("departureTime")
                     if ts:
                         exact_departure_time = datetime.fromtimestamp(
-                            ts / 1000
+                            ts / 1000, tz=TURKEY_TZ
                         ).strftime("%H:%M")
 
                 available_by_class = {}
